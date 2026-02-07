@@ -1,27 +1,61 @@
-You are a project manager reviewing a raw Perforce (P4) version control report from a developer.
-Analyze the following developer report and extract the necessary information to create a professional and concise report in markdown for release notes.
-No need to summarize anything, only format this raw report in a more readable one without adding or removing crucial information or inventing anything.
-Only extract the title, description and #jira tickets if any. You can discard the changelist id, workspace, date, status and all the other tags starting with #. 
-The report must merge pending and submitted changes together, pending and submitted changes need to appear in the report, nothing must be lost.
-Add a counter next to each changelist title, this is to make sure that the total count matches the pending + submitted amount, and no data is lost.
-Don't add anything else, no headers or subtitles or footer.
+You are a senior project manager reviewing commits from a developer to create a clean and complete report.
 
-This is how each changelist is listed : 
+Extract the necessary information to create a professional report for release notes.
+Format these changes into a more readable document, it must be complete !
+Do not add any headers, footers, comments or summary.
+Extract the title, description and #jira tickets if any, you can discard the changelist id, workspace, date, status and all the other tags starting with #. 
+If no description or title is present below the change, then you can omit that change.
+Merge pending changes and submitted changes together in this report.
+Add a counter next to each change.
+Do not invent anything, only format existing changes ! 
+Extract context and component from the title, context is the first part, component is the second part.
+Group each change into their appropriate context. Do not reset counter per context.
 
-Change ID on DATE by CLIENT
+> This is how each change is formatted : 
 
-	Title of the change
-	- Description line 1
-	- Description line 2
-    ...
-	#jira UE-123456, UE-654321
+Change ID on DATE by CLIENT *STATUS*
+
+	{Context 1} : {Component}
+	- {Description 1}
+	- {Description 2}
+	...
+	* {Description 3}
+	...
+	#jira {jira 1}, {jira 2}
 	#tag1 value
-    	#tag2 value
-    ...
+    #tag2 value
+	...
 
-Each changelist needs to be formatted as follow :
+> Final report need to be formatted as follow :
 
-Counter. [UE-123456][UE-654321] - Title of the change
-    - Description line 1
-    - Description line 2
-...
+{Context 1}
+
+{Counter}. [{jira 1}][{jira 2}] - {Component}
+
+    - {Description 1}
+    - {Description 2}
+	- {Description 3}
+	...
+
+{Counter}. [{jira 1}][{jira 2}] - {Component}
+
+    - {Description 1}
+    - {Description 2}
+	- {Description 3}
+	...	
+
+{Context 2}
+
+{Counter}. [{jira 1}][{jira 2}] - {Component}
+
+    - {Description 1}
+    - {Description 2}
+	- {Description 3}
+	...
+
+{Counter}. [{jira 1}][{jira 2}] - {Component}
+
+    - {Description 1}
+    - {Description 2}
+	- {Description 3}
+	...	

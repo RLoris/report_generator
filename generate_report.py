@@ -6,12 +6,14 @@ Generates a raw report of submitted + pending changes for a specific date range 
 Optionally, generates an AI report based on the raw report generated.
 """
 
+import os
 import subprocess
 import sys
 import argparse
 from datetime import datetime
 from io import StringIO
 import requests
+from utilities.decorators import timed
 
 def run_p4_command(p4_user, p4_workspace, p4_server, command):
     """Run a p4 command and return the output."""
@@ -100,6 +102,7 @@ def parse_pending_changes(output, start_date, end_date):
 
     return changes
 
+@timed
 def generate_raw_report(p4_user, p4_workspace, p4_server, start_date, end_date=None, depot_paths=None):
     """Generate the raw report and return as string."""
 
@@ -155,8 +158,6 @@ def generate_raw_report(p4_user, p4_workspace, p4_server, start_date, end_date=N
     report.write(f"{'='*60}\n\n")
 
     # Add pending changes
-    report.write(f"=== PENDING CHANGES ({len(pending_changes)}) ===\n")
-
     if pending_changes:
         for change in pending_changes:
             report.write(f"\n{change['header']}\n")
@@ -166,8 +167,6 @@ def generate_raw_report(p4_user, p4_workspace, p4_server, start_date, end_date=N
         report.write("No pending changes found for this period.\n")
 
     # Add submitted changes
-    report.write(f"=== SUBMITTED CHANGES ({submitted_count}) ===\n\n")
-
     submitted_cmd_full = ['changes', '-l', '-u', p4_user, '-s', 'submitted']
     if path_filter:
         for path in path_filter:
@@ -186,19 +185,18 @@ def generate_raw_report(p4_user, p4_workspace, p4_server, start_date, end_date=N
 
     return report.getvalue()
 
+@timed
 def generate_ai_report(report_text, ollama_url, model, custom_prompt):
     """Send raw report along user prompt to Ollama."""
 
-    prompt = f"""{custom_prompt}
+    prompt = f"""{custom_prompt}\n\n{report_text}"""
 
----
-Raw report:
-
-{report_text}
-
-"""
     # Send request to ollama and wait for response... Can be very long !
     try:
+        # Token context for the prompt + response, then get closest power of 2
+        num_ctx = int((len(prompt) / 3) * 2)
+        num_ctx = 1 << (num_ctx - 1).bit_length()
+
         response = requests.post(
             f"{ollama_url}/api/generate",
             json={
@@ -206,7 +204,8 @@ Raw report:
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.5
+                    "temperature": 0.1, # Deterministic
+                    "num_ctx": num_ctx
                 }
             }
         )
@@ -221,7 +220,7 @@ Raw report:
 def main():
     # Get inputs from user
     parser = argparse.ArgumentParser(
-        description='Generate a P4 report with the help of local AI model',
+        description='Generate a dev report with the help of a local AI model',
         epilog='Date format: YYYY-MM-DD (e.g., 2000-12-31)'
     )
     parser.add_argument('-u', '--user', required=True, help='P4 username')
@@ -233,8 +232,9 @@ def main():
     parser.add_argument('--raw-output', help='Save raw report into this file (required for raw report)')
     parser.add_argument('--ai-output', help='Save AI report into this file (required for AI report)')
     parser.add_argument('--ollama-url', default='http://localhost:11434', help='Ollama API URL (default: http://localhost:11434)')
-    parser.add_argument('--ollama-model', default='qwen2.5:32b', help='Ollama model to use (default: qwen2.5:32b)')
+    parser.add_argument('--ollama-model', default='qwen2.5:14b', help='Ollama model to use (default: qwen2.5:14b)')
     parser.add_argument('--prompt-file', help='Path to a file containing the custom prompt for AI report (required for AI report)')
+    parser.add_argument('--raw-reuse', action="store_true", help='Skip the raw report generation if it already exists at that path')
     args = parser.parse_args()
 
     # Sanitize inputs
@@ -246,17 +246,30 @@ def main():
         print("Error: Invalid date format. Use YYYY-MM-DD (e.g., 2000-12-31)", file=sys.stderr)
         sys.exit(1)
 
-    # Generate the raw report
-    print("Generating raw P4 report...", file=sys.stderr)
-    raw_report = generate_raw_report(
-        args.user, args.workspace, args.server, args.start_date, args.end_date, args.depot
-    )
+    raw_report = None
+    if args.raw_output and args.raw_reuse and os.path.isfile(args.raw_output):
 
-    # Save raw report
-    if args.raw_output:
-        with open(args.raw_output, 'w', encoding='utf-8') as f:
-            f.write(raw_report)
-        print(f"Raw report saved to: {args.raw_output}", file=sys.stderr)
+        # Load raw report
+        try:
+            with open(args.raw_output, 'r', encoding='utf-8') as f:
+                raw_report = f.read()
+            print(f"Reusing raw report file: {args.raw_output}", file=sys.stderr)    
+        except Exception as e:
+            print(f"Error reading raw report file: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+
+        # Generate the raw report
+        print("Generating raw P4 report...", file=sys.stderr)
+        raw_report = generate_raw_report(
+            args.user, args.workspace, args.server, args.start_date, args.end_date, args.depot
+        )
+
+        # Save raw report
+        if args.raw_output:
+            with open(args.raw_output, 'w', encoding='utf-8') as f:
+                f.write(raw_report)
+            print(f"Raw report saved to: {args.raw_output}", file=sys.stderr)
 
     # Generate AI report if requested (prompt + output must be set)
     if args.prompt_file and args.ai_output:
