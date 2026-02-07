@@ -1,5 +1,7 @@
 # Report Generator
 
+![Showcase](./assets/ReportGeneratorShowcase.gif)
+
 ## What
 
 This script generates a raw report for a specific date range using Perforce changes. Optionally, it can generate an AI report based on the raw report using ollama.
